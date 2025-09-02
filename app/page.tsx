@@ -50,12 +50,13 @@ export default function Dashboard() {
     fetchData()
   }, [selectedDate])
 
-  useEffect(() => {
-    if (autoRefresh) {
-      const interval = setInterval(fetchData, 30000) // Actualizar cada 30 segundos
-      return () => clearInterval(interval)
-    }
-  }, [autoRefresh, selectedDate])
+  
+useEffect(() => {
+  if (autoRefresh) {
+    const interval = setInterval(fetchData, 8 * 60 * 60 * 1000) // Actualizar cada 8 horas
+    return () => clearInterval(interval)
+  }
+}, [autoRefresh, selectedDate])
 
   const getOperationalMetrics = () => {
     if (!data) return { critical: 0, warning: 0, operational: 0, total: 0 }
