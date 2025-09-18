@@ -74,7 +74,7 @@ export function OperationalChart({ data, loading }: OperationalChartProps) {
               </ResponsiveContainer>
             ) : (
               <div className="h-64 flex items-center justify-center text-gray-400">
-                No hay datos de bombeo disponibles
+                No hay datos de bombeo disponibles (Acceda al calendario para otros antecedentes - El sistema se actualiza cada 8 horas)
               </div>
             )}
           </div>
