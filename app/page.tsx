@@ -24,7 +24,11 @@ interface DashboardData {
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const today = new Date()
+    console.log("[v0] Initializing with today's date:", today.toISOString())
+    return today
+  })
   const [selectedClient, setSelectedClient] = useState<string>("all")
   const [availableClients, setAvailableClients] = useState<string[]>([])
 
@@ -32,6 +36,7 @@ export default function Dashboard() {
     try {
       setLoading(true)
       console.log("[v0] Fetching data for date:", selectedDate.toISOString().split("T")[0])
+      console.log("[v0] Selected date full:", selectedDate)
 
       const response = await fetch("/api/sheets-data", {
         method: "POST",
