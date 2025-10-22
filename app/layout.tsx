@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Dashboard Operacional - DVS Tecnología',
   description: 'Sistema de monitoreo operacional en tiempo real',
+    generator: 'v0.app'
 }
 
 export default function RootLayout({
