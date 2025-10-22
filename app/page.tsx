@@ -31,6 +31,8 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true)
+      console.log("[v0] Fetching data for date:", selectedDate.toISOString().split("T")[0])
+
       const response = await fetch("/api/sheets-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,13 +41,23 @@ export default function Dashboard() {
 
       if (response.ok) {
         const result = await response.json()
+        console.log("[v0] Data received:", {
+          registros: result.registros?.length || 0,
+          dmas: result.dmas?.length || 0,
+          naves: result.naves?.length || 0,
+          rovs: result.rovs?.length || 0,
+          registrosData: result.registros,
+        })
         setData(result)
 
         const clients = Array.from(new Set(result.registros.map((r: any) => r.cliente).filter(Boolean)))
+        console.log("[v0] Available clients:", clients)
         setAvailableClients(clients as string[])
+      } else {
+        console.error("[v0] Error response:", response.status, response.statusText)
       }
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("[v0] Error fetching data:", error)
     } finally {
       setLoading(false)
     }
