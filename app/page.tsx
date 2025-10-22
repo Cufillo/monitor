@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, RefreshCw, AlertTriangle, CheckCircle, XCircle, Ship, Settings, Wrench, Printer, Mail } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RefreshCw, Ship, Settings, Printer, Mail, Users } from "lucide-react"
 import { MetricsGrid } from "@/components/metrics-grid"
 import { EquipmentStatus } from "@/components/equipment-status"
 import { OperationalChart } from "@/components/operational-chart"
@@ -23,24 +24,28 @@ interface DashboardData {
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date()) // Carga con la fecha del día
-  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedClient, setSelectedClient] = useState<string>("all")
+  const [availableClients, setAvailableClients] = useState<string[]>([])
 
   const fetchData = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/sheets-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: selectedDate.toISOString().split('T')[0] })
+      const response = await fetch("/api/sheets-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate.toISOString().split("T")[0] }),
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setData(result)
+
+        const clients = Array.from(new Set(result.registros.map((r: any) => r.cliente).filter(Boolean)))
+        setAvailableClients(clients as string[])
       }
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error("Error fetching data:", error)
     } finally {
       setLoading(false)
     }
@@ -50,48 +55,76 @@ export default function Dashboard() {
     fetchData()
   }, [selectedDate])
 
-  
-useEffect(() => {
-  if (autoRefresh) {
-    const interval = setInterval(fetchData, 8 * 60 * 60 * 1000) // Actualizar cada 8 horas
+  useEffect(() => {
+    const interval = setInterval(fetchData, 8 * 60 * 60 * 1000)
     return () => clearInterval(interval)
-  }
-}, [autoRefresh, selectedDate])
+  }, [selectedDate])
+
+  const filteredData = data
+    ? {
+        ...data,
+        registros:
+          selectedClient === "all" ? data.registros : data.registros.filter((r) => r.cliente === selectedClient),
+        dmas:
+          selectedClient === "all"
+            ? data.dmas
+            : data.dmas.filter((d) => {
+                const registro = data.registros.find((r) => r.id_registro === d.id_registro)
+                return registro?.cliente === selectedClient
+              }),
+        naves:
+          selectedClient === "all"
+            ? data.naves
+            : data.naves.filter((n) => {
+                const registro = data.registros.find((r) => r.id_registro === n.id_registro)
+                return registro?.cliente === selectedClient
+              }),
+        rovs:
+          selectedClient === "all"
+            ? data.rovs
+            : data.rovs.filter((r) => {
+                const registro = data.registros.find((reg) => reg.id_registro === r.id_registro)
+                return registro?.cliente === selectedClient
+              }),
+      }
+    : null
 
   const getOperationalMetrics = () => {
-    if (!data) return { critical: 0, warning: 0, operational: 0, total: 0 }
-    
-    let critical = 0, warning = 0, operational = 0
-    
-    data.dmas.forEach(dma => {
+    if (!filteredData) return { critical: 0, warning: 0, operational: 0, total: 0 }
+
+    let critical = 0,
+      warning = 0,
+      operational = 0
+
+    filteredData.dmas.forEach((dma) => {
       const estado = dma.estado_equipo?.toUpperCase()
-      if (estado === 'INOPERATIVO') critical++
-      else if (estado === 'BOMBEANDO') operational++
+      if (estado === "INOPERATIVO") critical++
+      else if (estado === "BOMBEANDO") operational++
       else warning++
     })
-    
-    return { critical, warning, operational, total: data.dmas.length }
+
+    return { critical, warning, operational, total: filteredData.dmas.length }
   }
 
   const metrics = getOperationalMetrics()
 
   const handleSendEmail = async () => {
     try {
-      const response = await fetch('/api/send-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          date: selectedDate.toISOString().split('T')[0],
-          data: data 
-        })
+      const response = await fetch("/api/send-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: selectedDate.toISOString().split("T")[0],
+          data: filteredData,
+        }),
       })
-      
+
       if (response.ok) {
-        alert('Reporte enviado por correo exitosamente')
+        alert("Reporte enviado por correo exitosamente")
       }
     } catch (error) {
-      console.error('Error sending email:', error)
-      alert('Error al enviar el reporte')
+      console.error("Error sending email:", error)
+      alert("Error al enviar el reporte")
     }
   }
 
@@ -104,8 +137,25 @@ useEffect(() => {
             <h1 className="text-3xl font-bold text-white">Dashboard Operacional</h1>
             <p className="text-gray-300 mt-1">Sistema de control y gestión de datos - V2</p>
           </div>
-          
+
           <div className="flex items-center gap-3">
+            <Select value={selectedClient} onValueChange={setSelectedClient}>
+              <SelectTrigger className="w-[200px] bg-[#2A2F3A] border-gray-600 text-white">
+                <Users className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Seleccionar cliente" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#2A2F3A] border-gray-600">
+                <SelectItem value="all" className="text-white">
+                  Todos los clientes
+                </SelectItem>
+                {availableClients.map((client) => (
+                  <SelectItem key={client} value={client} className="text-white">
+                    {client}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
             <Button
               variant="outline"
@@ -125,17 +175,8 @@ useEffect(() => {
               <Mail className="h-4 w-4" />
               Enviar
             </Button>
-            <Button
-              variant={autoRefresh ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${autoRefresh ? 'animate-spin' : ''}`} />
-              Auto
-            </Button>
             <Button onClick={fetchData} disabled={loading} size="sm" className="gap-2">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Actualizar
             </Button>
           </div>
@@ -148,31 +189,29 @@ useEffect(() => {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium text-white">Sistema Activo</span>
+                  <span className="text-sm font-medium text-white">Sistema Activo - Actualización cada 8 horas</span>
                 </div>
                 {data && (
                   <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-300">
-                    Última actualización: {new Date(data.lastUpdate).toLocaleTimeString('es-CL')}
+                    Última actualización: {new Date(data.lastUpdate).toLocaleTimeString("es-CL")}
                   </Badge>
                 )}
               </div>
               <div className="text-sm text-gray-300">
-                {selectedDate.toLocaleDateString('es-CL', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
+                {selectedDate.toLocaleDateString("es-CL", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
                 })}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Resumen del Registro Diario - Nueva Posición */}
-        <RegistroSummary data={data} loading={loading} />
+        <RegistroSummary data={filteredData} loading={loading} />
 
-        {/* Metrics Grid */}
-        <MetricsGrid 
+        <MetricsGrid
           critical={metrics.critical}
           warning={metrics.warning}
           operational={metrics.operational}
@@ -182,21 +221,19 @@ useEffect(() => {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Equipment Status */}
           <div className="lg:col-span-2">
-            <EquipmentStatus data={data} loading={loading} />
+            <EquipmentStatus data={filteredData} loading={loading} />
           </div>
-          
-          {/* Recent Activity */}
+
           <div>
-            <RecentActivity data={data} loading={loading} />
+            <RecentActivity data={filteredData} loading={loading} />
           </div>
         </div>
 
         {/* Charts and Fleet Section */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <OperationalChart data={data} loading={loading} />
-          
+          <OperationalChart data={filteredData} loading={loading} />
+
           <div className="space-y-4">
             {/* Naves Section */}
             <Card className="bg-[#2A2F3A] border-gray-700">
@@ -209,17 +246,20 @@ useEffect(() => {
               <CardContent>
                 {loading ? (
                   <div className="space-y-3">
-                    {[1, 2].map(i => (
+                    {[1, 2].map((i) => (
                       <div key={i} className="h-16 bg-gray-600 rounded animate-pulse" />
                     ))}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {data?.naves.map((nave, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-[#343A47] rounded-lg border border-gray-600">
+                    {filteredData?.naves.map((nave, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-[#343A47] rounded-lg border border-gray-600"
+                      >
                         <div>
                           <div className="font-medium text-white">{nave.nave_nombre}</div>
-                          <div className="text-sm text-gray-300">{nave.nave_observaciones || 'Sin observaciones'}</div>
+                          <div className="text-sm text-gray-300">{nave.nave_observaciones || "Sin observaciones"}</div>
                         </div>
                         <Badge className="bg-green-600 text-white hover:bg-green-700">Activa</Badge>
                       </div>
@@ -240,21 +280,30 @@ useEffect(() => {
               <CardContent>
                 {loading ? (
                   <div className="space-y-3">
-                    {[1, 2].map(i => (
+                    {[1, 2].map((i) => (
                       <div key={i} className="h-16 bg-gray-600 rounded animate-pulse" />
                     ))}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {data?.rovs.map((rov, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-[#343A47] rounded-lg border border-gray-600">
+                    {filteredData?.rovs.map((rov, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-[#343A47] rounded-lg border border-gray-600"
+                      >
                         <div>
                           <div className="font-medium text-white">{rov.rov_numero}</div>
-                          <div className="text-sm text-gray-300">{rov.ubicacion} - {rov.responsable}</div>
+                          <div className="text-sm text-gray-300">
+                            {rov.ubicacion} - {rov.responsable}
+                          </div>
                           <div className="text-xs text-gray-400">{rov.observaciones}</div>
                         </div>
-                        <Badge 
-                          className={rov.estado === 'Operativo' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-yellow-600 text-white hover:bg-yellow-700'}
+                        <Badge
+                          className={
+                            rov.estado === "Operativo"
+                              ? "bg-green-600 text-white hover:bg-green-700"
+                              : "bg-yellow-600 text-white hover:bg-yellow-700"
+                          }
                         >
                           {rov.estado}
                         </Badge>
