@@ -32,10 +32,9 @@ export async function getAllSheetsData(reportDate: string) {
 
     const allRegistros = processRawRegistros(registrosRes.data.values || [])
 
-    // Encontrar todos los registros que coinciden con la fecha del reporte
     const reportDateUTC = new Date(reportDate + "T00:00:00Z").toISOString().split("T")[0]
     const matchingRegistros = allRegistros.filter((r) => {
-      if (r.fecha instanceof Date && !isNaN(r.fecha.getTime())) {
+      if (r.fecha && r.fecha instanceof Date && !isNaN(r.fecha.getTime())) {
         return r.fecha.toISOString().split("T")[0] === reportDateUTC
       }
       return false

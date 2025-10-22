@@ -70,7 +70,7 @@ export default function Dashboard() {
   useEffect(() => {
     const interval = setInterval(fetchData, 8 * 60 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [selectedDate])
+  }, [])
 
   const filteredData = data
     ? {
