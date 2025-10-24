@@ -9,7 +9,14 @@ const logger = winston.createLogger({
 
 export async function getAllSheetsData(reportDate: string) {
   try {
-    logger.info("🔍 Starting getAllSheetsData for REPORT date:", reportDate)
+    logger.info("[v0] 🔍 Starting getAllSheetsData for REPORT date:", reportDate)
+    logger.info("[v0] 🔑 Credentials check:", {
+      hasClientEmail: !!process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
+      clientEmail: process.env.GOOGLE_SHEETS_CLIENT_EMAIL?.substring(0, 20) + "...",
+      hasPrivateKey: !!process.env.GOOGLE_SHEETS_PRIVATE_KEY,
+      privateKeyLength: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.length,
+      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+    })
 
     const auth = new google.auth.GoogleAuth({
       credentials: {
@@ -22,7 +29,7 @@ export async function getAllSheetsData(reportDate: string) {
     const sheets = google.sheets({ version: "v4", auth })
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID
 
-    logger.info("📊 Fetching Registros sheet...")
+    logger.info("[v0] 📊 Fetching Registros sheet from:", spreadsheetId)
 
     const registrosRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -31,39 +38,45 @@ export async function getAllSheetsData(reportDate: string) {
       dateTimeRenderOption: "FORMATTED_STRING",
     })
 
-    logger.info(`📊 Raw Registros data rows: ${registrosRes.data.values?.length || 0}`)
+    logger.info(`[v0] 📊 Raw Registros data rows: ${registrosRes.data.values?.length || 0}`)
+
+    if (registrosRes.data.values && registrosRes.data.values.length > 0) {
+      logger.info("[v0] 📋 First 3 rows of raw data:")
+      registrosRes.data.values.slice(0, 3).forEach((row, i) => {
+        logger.info(`[v0]   Row ${i}:`, row)
+      })
+    }
 
     const allRegistros = processRawRegistros(registrosRes.data.values || [])
 
-    logger.info(`📊 Processed Registros count: ${allRegistros.length}`)
+    logger.info(`[v0] 📊 Processed Registros count: ${allRegistros.length}`)
     logger.info(
-      `📊 Sample registro dates:`,
-      allRegistros.slice(0, 3).map((r) => ({
+      `[v0] 📊 All registro dates:`,
+      allRegistros.map((r) => ({
         id: r.id_registro,
-        fecha: r.fecha,
+        fecha_raw: r.fecha,
         fechaISO: r.fecha?.toISOString(),
         cliente: r.cliente,
         centro: r.centro,
       })),
     )
 
-    const reportDateObj = new Date(reportDate + "T00:00:00Z")
-    const reportDateUTC = reportDateObj.toISOString().split("T")[0]
+    const reportDateObj = new Date(reportDate + "T00:00:00")
+    const reportDateStr = reportDateObj.toISOString().split("T")[0]
 
-    logger.info(`🔍 Looking for registros matching report date: ${reportDate} (UTC: ${reportDateUTC})`)
+    logger.info(`[v0] 🔍 Looking for registros matching report date: ${reportDate}`)
+    logger.info(`[v0] 🔍 Report date as ISO string: ${reportDateStr}`)
 
     const matchingRegistros = allRegistros.filter((r) => {
       if (r.fecha && r.fecha instanceof Date && !isNaN(r.fecha.getTime())) {
-        const registroDateUTC = r.fecha.toISOString().split("T")[0]
-        const matches = registroDateUTC === reportDateUTC
+        const registroDateStr = r.fecha.toISOString().split("T")[0]
+        const matches = registroDateStr === reportDateStr
 
-        if (matches) {
-          logger.info(`✅ MATCH: ${r.id_registro} - ${registroDateUTC} === ${reportDateUTC}`)
-        }
+        logger.info(`[v0] 🔍 Comparing: ${registroDateStr} === ${reportDateStr} ? ${matches} (ID: ${r.id_registro})`)
 
         return matches
       }
-      logger.warn(`⚠️ Invalid date for registro ${r.id_registro}:`, r.fecha)
+      logger.warn(`[v0] ⚠️ Invalid date for registro ${r.id_registro}:`, r.fecha)
       return false
     })
 
@@ -71,11 +84,11 @@ export async function getAllSheetsData(reportDate: string) {
 
     if (matchingRegistros.length > 0) {
       logger.info(
-        `✅ Found ${matchingRegistros.length} matching Registros for report date ${reportDate}:`,
+        `[v0] ✅ Found ${matchingRegistros.length} matching Registros for report date ${reportDate}:`,
         targetIdRegistros,
       )
     } else {
-      logger.warn(`⚠️ No matching Registros found for report date ${reportDate}. Other sheets will be empty.`)
+      logger.warn(`[v0] ⚠️ No matching Registros found for report date ${reportDate}. Other sheets will be empty.`)
     }
 
     const [dmasRes, navesRes, rovsRes] = await Promise.all([
@@ -118,7 +131,7 @@ export async function getAllSheetsData(reportDate: string) {
       lastUpdate: new Date().toISOString(),
     }
   } catch (error) {
-    logger.error("❌ Error fetching Google Sheets data:", error)
+    logger.error("[v0] ❌ Error fetching Google Sheets data:", error)
     throw error
   }
 }
@@ -126,26 +139,26 @@ export async function getAllSheetsData(reportDate: string) {
 // Nueva función para procesar registros sin filtrar por fecha, solo parsear
 function processRawRegistros(values: any[][]) {
   if (!values || values.length < 2) {
-    logger.warn("⚠️ No data in Registros sheet")
+    logger.warn("[v0] ⚠️ No data in Registros sheet")
     return []
   }
 
-  logger.info("📋 Registros headers:", values[0])
+  logger.info("[v0] 📋 Registros headers:", values[0])
 
   const rows = values.slice(1)
 
   const processed = rows.map((row, index) => {
     const fecha = validateDate(row[1])
 
-    if (index < 3) {
-      logger.info(`📝 Processing registro row ${index}:`, {
-        id_registro: row[0],
-        fecha_raw: row[1],
-        fecha_parsed: fecha,
-        cliente: row[8],
-        centro: row[9],
-      })
-    }
+    logger.info(`[v0] 📝 Processing registro row ${index}:`, {
+      id_registro: row[0],
+      fecha_raw: row[1],
+      fecha_type: typeof row[1],
+      fecha_parsed: fecha,
+      fecha_parsed_iso: fecha?.toISOString(),
+      cliente: row[8],
+      centro: row[9],
+    })
 
     return {
       id_registro: validateString(row[0]),
@@ -165,7 +178,7 @@ function processRawRegistros(values: any[][]) {
     }
   })
 
-  logger.info(`✅ Processed ${processed.length} registros`)
+  logger.info(`[v0] ✅ Processed ${processed.length} registros`)
   return processed
 }
 
