@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RefreshCw, Ship, Settings, Printer, Mail, Users } from "lucide-react"
+import { RefreshCw, Ship, Settings, Printer, Mail, Users, Building2 } from "lucide-react"
 import { MetricsGrid } from "@/components/metrics-grid"
 import { EquipmentStatus } from "@/components/equipment-status"
 import { OperationalChart } from "@/components/operational-chart"
@@ -30,7 +30,9 @@ export default function Dashboard() {
     return today
   })
   const [selectedClient, setSelectedClient] = useState<string>("all")
+  const [selectedCenter, setSelectedCenter] = useState<string>("all")
   const [availableClients, setAvailableClients] = useState<string[]>([])
+  const [availableCenters, setAvailableCenters] = useState<string[]>([])
 
   const fetchData = async () => {
     try {
@@ -56,8 +58,11 @@ export default function Dashboard() {
         setData(result)
 
         const clients = Array.from(new Set(result.registros.map((r: any) => r.cliente).filter(Boolean)))
+        const centers = Array.from(new Set(result.registros.map((r: any) => r.centro).filter(Boolean)))
         console.log("[v0] Available clients:", clients)
+        console.log("[v0] Available centers:", centers)
         setAvailableClients(clients as string[])
+        setAvailableCenters(centers as string[])
       } else {
         console.error("[v0] Error response:", response.status, response.statusText)
       }
@@ -80,29 +85,32 @@ export default function Dashboard() {
   const filteredData = data
     ? {
         ...data,
-        registros:
-          selectedClient === "all" ? data.registros : data.registros.filter((r) => r.cliente === selectedClient),
-        dmas:
-          selectedClient === "all"
-            ? data.dmas
-            : data.dmas.filter((d) => {
-                const registro = data.registros.find((r) => r.id_registro === d.id_registro)
-                return registro?.cliente === selectedClient
-              }),
-        naves:
-          selectedClient === "all"
-            ? data.naves
-            : data.naves.filter((n) => {
-                const registro = data.registros.find((r) => r.id_registro === n.id_registro)
-                return registro?.cliente === selectedClient
-              }),
-        rovs:
-          selectedClient === "all"
-            ? data.rovs
-            : data.rovs.filter((r) => {
-                const registro = data.registros.find((reg) => reg.id_registro === r.id_registro)
-                return registro?.cliente === selectedClient
-              }),
+        registros: data.registros.filter((r) => {
+          const clientMatch = selectedClient === "all" || r.cliente === selectedClient
+          const centerMatch = selectedCenter === "all" || r.centro === selectedCenter
+          return clientMatch && centerMatch
+        }),
+        dmas: data.dmas.filter((d) => {
+          const registro = data.registros.find((r) => r.id_registro === d.id_registro)
+          if (!registro) return false
+          const clientMatch = selectedClient === "all" || registro.cliente === selectedClient
+          const centerMatch = selectedCenter === "all" || registro.centro === selectedCenter
+          return clientMatch && centerMatch
+        }),
+        naves: data.naves.filter((n) => {
+          const registro = data.registros.find((r) => r.id_registro === n.id_registro)
+          if (!registro) return false
+          const clientMatch = selectedClient === "all" || registro.cliente === selectedClient
+          const centerMatch = selectedCenter === "all" || registro.centro === selectedCenter
+          return clientMatch && centerMatch
+        }),
+        rovs: data.rovs.filter((r) => {
+          const registro = data.registros.find((reg) => reg.id_registro === r.id_registro)
+          if (!registro) return false
+          const clientMatch = selectedClient === "all" || registro.cliente === selectedClient
+          const centerMatch = selectedCenter === "all" || registro.centro === selectedCenter
+          return clientMatch && centerMatch
+        }),
       }
     : null
 
@@ -155,7 +163,7 @@ export default function Dashboard() {
             <p className="text-gray-300 mt-1">Sistema de control y gestión de datos - V2</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Select value={selectedClient} onValueChange={setSelectedClient}>
               <SelectTrigger className="w-[200px] bg-[#2A2F3A] border-gray-600 text-white">
                 <Users className="h-4 w-4 mr-2" />
@@ -168,6 +176,23 @@ export default function Dashboard() {
                 {availableClients.map((client) => (
                   <SelectItem key={client} value={client} className="text-white">
                     {client}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedCenter} onValueChange={setSelectedCenter}>
+              <SelectTrigger className="w-[200px] bg-[#2A2F3A] border-gray-600 text-white">
+                <Building2 className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Seleccionar centro" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#2A2F3A] border-gray-600">
+                <SelectItem value="all" className="text-white">
+                  Todos los centros
+                </SelectItem>
+                {availableCenters.map((center) => (
+                  <SelectItem key={center} value={center} className="text-white">
+                    {center}
                   </SelectItem>
                 ))}
               </SelectContent>

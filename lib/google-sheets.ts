@@ -22,7 +22,8 @@ export async function getAllSheetsData(reportDate: string) {
     const sheets = google.sheets({ version: "v4", auth })
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID
 
-    // Obtener todos los registros para encontrar los id_registro del día del reporte
+    logger.info("📊 Fetching Registros sheet...")
+
     const registrosRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: "Registros!A:N",
@@ -30,13 +31,39 @@ export async function getAllSheetsData(reportDate: string) {
       dateTimeRenderOption: "FORMATTED_STRING",
     })
 
+    logger.info(`📊 Raw Registros data rows: ${registrosRes.data.values?.length || 0}`)
+
     const allRegistros = processRawRegistros(registrosRes.data.values || [])
 
-    const reportDateUTC = new Date(reportDate + "T00:00:00Z").toISOString().split("T")[0]
+    logger.info(`📊 Processed Registros count: ${allRegistros.length}`)
+    logger.info(
+      `📊 Sample registro dates:`,
+      allRegistros.slice(0, 3).map((r) => ({
+        id: r.id_registro,
+        fecha: r.fecha,
+        fechaISO: r.fecha?.toISOString(),
+        cliente: r.cliente,
+        centro: r.centro,
+      })),
+    )
+
+    const reportDateObj = new Date(reportDate + "T00:00:00Z")
+    const reportDateUTC = reportDateObj.toISOString().split("T")[0]
+
+    logger.info(`🔍 Looking for registros matching report date: ${reportDate} (UTC: ${reportDateUTC})`)
+
     const matchingRegistros = allRegistros.filter((r) => {
       if (r.fecha && r.fecha instanceof Date && !isNaN(r.fecha.getTime())) {
-        return r.fecha.toISOString().split("T")[0] === reportDateUTC
+        const registroDateUTC = r.fecha.toISOString().split("T")[0]
+        const matches = registroDateUTC === reportDateUTC
+
+        if (matches) {
+          logger.info(`✅ MATCH: ${r.id_registro} - ${registroDateUTC} === ${reportDateUTC}`)
+        }
+
+        return matches
       }
+      logger.warn(`⚠️ Invalid date for registro ${r.id_registro}:`, r.fecha)
       return false
     })
 
@@ -99,25 +126,47 @@ export async function getAllSheetsData(reportDate: string) {
 // Nueva función para procesar registros sin filtrar por fecha, solo parsear
 function processRawRegistros(values: any[][]) {
   if (!values || values.length < 2) {
+    logger.warn("⚠️ No data in Registros sheet")
     return []
   }
+
+  logger.info("📋 Registros headers:", values[0])
+
   const rows = values.slice(1)
-  return rows.map((row) => ({
-    id_registro: validateString(row[0]),
-    fecha: validateDate(row[1]),
-    estado_puerto_directemar: validateString(row[2]),
-    estado_puerto_concesion: validateString(row[3]),
-    dia_operacion: validateNumber(row[4]),
-    num_equipos: validateNumber(row[5]),
-    num_equipos_inoperativos: validateNumber(row[6]),
-    num_equipos_bombeando: validateNumber(row[7]),
-    cliente: validateString(row[8]),
-    centro: validateString(row[9]),
-    responsable: validateString(row[10]),
-    condiciones_clima: validateString(row[11]),
-    detalles: validateString(row[12]),
-    archivos_clima: validateString(row[13]),
-  }))
+
+  const processed = rows.map((row, index) => {
+    const fecha = validateDate(row[1])
+
+    if (index < 3) {
+      logger.info(`📝 Processing registro row ${index}:`, {
+        id_registro: row[0],
+        fecha_raw: row[1],
+        fecha_parsed: fecha,
+        cliente: row[8],
+        centro: row[9],
+      })
+    }
+
+    return {
+      id_registro: validateString(row[0]),
+      fecha: fecha,
+      estado_puerto_directemar: validateString(row[2]),
+      estado_puerto_concesion: validateString(row[3]),
+      dia_operacion: validateNumber(row[4]),
+      num_equipos: validateNumber(row[5]),
+      num_equipos_inoperativos: validateNumber(row[6]),
+      num_equipos_bombeando: validateNumber(row[7]),
+      cliente: validateString(row[8]),
+      centro: validateString(row[9]),
+      responsable: validateString(row[10]),
+      condiciones_clima: validateString(row[11]),
+      detalles: validateString(row[12]),
+      archivos_clima: validateString(row[13]),
+    }
+  })
+
+  logger.info(`✅ Processed ${processed.length} registros`)
+  return processed
 }
 
 // Las funciones de procesamiento de DMAs, Naves, ROVs ahora reciben el array de id_registro a buscar
@@ -223,15 +272,23 @@ function validateString(value: any): string {
 }
 
 function validateDate(value: any): Date | null {
-  if (typeof value === "string" || typeof value === "number") {
-    if (typeof value === "number" && value > 0) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30))
-      const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000)
-      return isNaN(date.getTime()) ? null : date
-    }
+  if (!value) {
+    return null
+  }
+
+  // Handle Excel serial date numbers
+  if (typeof value === "number" && value > 0) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30))
+    const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000)
+    return isNaN(date.getTime()) ? null : date
+  }
+
+  // Handle string dates
+  if (typeof value === "string") {
     const date = new Date(value)
     return isNaN(date.getTime()) ? null : date
   }
+
   return null
 }
 
